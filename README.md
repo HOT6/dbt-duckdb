@@ -139,6 +139,7 @@ pip install -U duckcli
 ## dbt-duckdb example
   - https://github.com/dbt-labs/jaffle_shop_duckdb
   - `jaffle_shop` is a fictional ecommerce store
+  - https://rmoff.net/2022/10/20/data-engineering-in-2022-exploring-dbt-with-duckdb/
 ```
 jaffle_shop_duckdb
 └── models
@@ -292,7 +293,7 @@ dbt build
 
 </details>
 
-> 데이터베이스 파일의 경로는 profiles.ymldbt 구성 파일에서 설정.
+> 데이터베이스 파일의 경로는 profiles.yml dbt 구성 파일에서 설정.
 ```yaml
   outputs:
     dev:
