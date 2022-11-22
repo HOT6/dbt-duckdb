@@ -453,9 +453,224 @@ jaffle_shop.duckdb> select last_name,count(*) from raw_customers group by last_n
 ...
 ```
 
+나머지 시드 단계 실행
+```
+dbt seed
+```
+
+
+#### **dbt compile**
+  - dbt run 문서를 보면 컴파일 된 sql model 파일을 실행하므로 `dbt compile` 동작을 먼저 확인
+  > dbt run executes compiled sql model files against the current target database
+
+  > dbt compile generates executable SQL from source model, test, and analysis files. You can find these compiled SQL files in the target/ directory of your dbt project.
+
+  compile 후 `target/` directory에 저장하므로 기존 `target/` directory를 삭제하고 `customers.sql` 모델 하나만 compile 후 확인 
+  ```
+  rm -rf target
+
+  /mnt/c/U/s/z/w/d/jaffle_shop_duckdb | on duckdb ?1  head models/customers.sql
+  with customers as (
+  
+      select * from {{ ref('stg_customers') }}
+  
+  ),
+  
+  orders as (
+  
+      select * from {{ ref('stg_orders') }}
+  
+  ```
+
+`ref('stg_customers')` 참조하고 있는 내용 확인
+
+`models/staging/stg_customers.sql`:
+- seed data에서 데이터를 읽어온 후 id를 customer_id로 이름 변경
+```
+with source as (
+
+    {#-
+    Normally we would select from the table here, but we are using seeds to load
+    our data in this project
+    #}
+    select * from {{ ref('raw_customers') }}
+
+),
+
+renamed as (
+
+    select
+        id as customer_id,
+        first_name,
+        last_name
+
+    from source
+
+)
+
+select * from renamed
+```
+
+`dbt compile --model models/staging/stg_customers.sql`
+```
+ /mnt/c/U/s/z/w/d/jaffle_shop_duckdb | on duckdb  dbt compile --model models/staging/stg_customers.sql
+07:16:35  Running with dbt=1.3.1
+07:16:35  Partial parse save file not found. Starting full parse.
+07:16:36  Found 5 models, 20 tests, 0 snapshots, 0 analyses, 292 macros, 0 operations, 3 seed files, 0 sources, 0 exposures, 0 metrics
+07:16:36
+07:16:36  Concurrency: 24 threads (target='dev')
+07:16:36
+07:16:36  Done.
+```
+
+`target/` 디렉토리 확인
+```
+ /mnt/c/U/s/z/w/d/jaffle_shop_duckdb | on duckdb  ls -lR target                       ok | dbt py | system node | at 16:17:16
+target:
+total 748
+drwxr-xr-x 1 sc 1000   4096 Nov 22 16:16 compiled
+-rw-r--r-- 1 sc 1000  24254 Nov 22 16:16 graph.gpickle
+-rw-r--r-- 1 sc 1000 370891 Nov 22 16:16 manifest.json
+-rw-r--r-- 1 sc 1000 361123 Nov 22 16:16 partial_parse.msgpack
+-rw-r--r-- 1 sc 1000   2105 Nov 22 16:16 run_results.json
+
+target/compiled:
+total 0
+drwxr-xr-x 1 sc 1000 4096 Nov 22 16:16 jaffle_shop
+
+target/compiled/jaffle_shop:
+total 0
+drwxr-xr-x 1 sc 1000 4096 Nov 22 16:16 models
+
+target/compiled/jaffle_shop/models:
+total 0
+drwxr-xr-x 1 sc 1000 4096 Nov 22 16:16 staging
+
+target/compiled/jaffle_shop/models/staging:
+total 0
+drwxr-xr-x 1 sc 1000 4096 Nov 22 16:16 schema.yml
+-rw-r--r-- 1 sc 1000  202 Nov 22 16:16 stg_customers.sql
+
+target/compiled/jaffle_shop/models/staging/schema.yml:
+total 0
+-rw-r--r-- 1 sc 1000  96 Nov 22 16:16 not_null_stg_customers_customer_id.sql
+-rw-r--r-- 1 sc 1000 187 Nov 22 16:16 unique_stg_customers_customer_id.sql
+```
+
+compile 된 `target/compiled/jaffle_shop/models/staging/stg_customers.sql` 내용을 확인해보면
+`{{ ref('raw_customers') }}` -> `"main"."main"."raw_customers"` 로 변경되어 참조를 해결함을 확인
+```
+ /mnt/c/U/s/z/w/d/jaffle_shop_duckdb | on duckdb  head target/compiled/jaffle_shop/models/staging/stg_customers.sql
+with source as (
+    select * from "main"."main"."raw_customers"
+
+),
+```
+
+target/compiled/jaffle_shop/models/staging/schema.yml 폴더에 제약조건 내용 확인.
+`staging/schema.yml` 에 정의된 제약조건.
+```
+ /mnt/c/U/s/z/w/d/jaffle_shop_duckdb | on duckdb  head models/staging/schema.yml      ok | dbt py | system node | at 16:19:48
+version: 2
+
+models:
+  - name: stg_customers
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+```
+
 #### **dbt run**
 > dbt run executes compiled sql model files against the current target database
 
-#### **dbt test**
+  - compile 까지 마친 duckdb 상태 확인
+  - 위에서 실행한 `dbt seed` 결과인 seed 데이터만 생성되어 있음. `compile` 단계에서는 데이터 이동이 없음을 확인.
+
+  `duckdb jaffle_shop.duckdb -c show` (duckdb-cli 필요, https://duckdb.org/docs/api/cli.html)
+  ```
+  ┌───────────────┬────────────────────────────────────────┬──────────────────────────────────────┬───────────┐
+  │  table_name   │              column_names              │             column_types             │ temporary │
+  │    varchar    │               varchar[]                │              varchar[]               │  boolean  │
+  ├───────────────┼────────────────────────────────────────┼──────────────────────────────────────┼───────────┤
+  │ raw_customers │ [first_name, id, last_name]            │ [VARCHAR, INTEGER, VARCHAR]          │ false     │
+  │ raw_orders    │ [id, order_date, status, user_id]      │ [INTEGER, DATE, VARCHAR, INTEGER]    │ false     │
+  │ raw_payments  │ [amount, id, order_id, payment_method] │ [INTEGER, INTEGER, INTEGER, VARCHAR] │ false     │
+  └───────────────┴────────────────────────────────────────┴──────────────────────────────────────┴───────────┘
+  ```
+
+dbt run 후 생성된 `target/run` 디렉토리 파일에서 DML 확인 가능 (`create view`)
+```
+dbt run --models stg_customers
+
+cat ./target/run/jaffle_shop/models/staging/stg_customers.sql
+
+  create view "main"."stg_customers__dbt_tmp" as (
+    with source as (
+    select * from "main"."main"."raw_customers"
+
+),
+
+renamed as (
+
+    select
+        id as customer_id,
+        first_name,
+        last_name
+
+    from source
+
+)
+
+select * from renamed
+  );
+```
+
+
+duckcli를 통해 view가 생성됨을 확인.
+```
+jaffle_shop.duckdb> select table_name, table_type from information_schema.tables;
++---------------+------------+
+| table_name    | table_type |
++---------------+------------+
+| raw_customers | BASE TABLE |
+| raw_orders    | BASE TABLE |
+| raw_payments  | BASE TABLE |
+| stg_customers | VIEW       |
++---------------+------------+
+4 rows in set
+Time: 0.005s
+jaffle_shop.duckdb> select definition from pg_views where viewname='stg_customers';
++-------------------------------------------------------------------------------------------------------------------------------------------------+
+| definition                                                                                                                                      |
++-------------------------------------------------------------------------------------------------------------------------------------------------+
+| /* {"app": "dbt", "dbt_version": "1.3.1", "profile_name": "jaffle_shop", "target_name": "dev", "node_id": "model.jaffle_shop.stg_customers"} */ |
+|                                                                                                                                                 |
+|   create view "main"."stg_customers__dbt_tmp" as (                                                                                              |
+|     with source as (                                                                                                                            |
+|     select * from "main"."main"."raw_customers"                                                                                                 |
+|                                                                                                                                                 |
+| ),                                                                                                                                              |
+|                                                                                                                                                 |
+| renamed as (                                                                                                                                    |
+|                                                                                                                                                 |
+|     select                                                                                                                                      |
+|         id as customer_id,                                                                                                                      |
+|         first_name,                                                                                                                             |
+|         last_name                                                                                                                               |
+|                                                                                                                                                 |
+|     from source                                                                                                                                 |
+|                                                                                                                                                 |
+| )                                                                                                                                               |
+|                                                                                                                                                 |
+| select * from renamed                                                                                                                           |
+|   );                                                                                                                                            |
+|                                                                                                                                                 |
+| ;                                                                                                                                               |
++-------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set
+Time: 0.005s
+```
 
 
