@@ -1,6 +1,6 @@
 # dbt
   - https://docs.getdbt.com/docs/introduction
-  > dbt is a transformation workflow : E**T**L
+  > dbt is a transformation workflow — it’s the T of the ELT/ETL process.
  <details>
 <summary>
 
