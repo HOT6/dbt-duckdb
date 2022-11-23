@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: stg_account
+    columns:
+      - name: account_id
+        tests:
+          - unique
+          - not_null
+
+  - name: stg_item
+    columns:
+      - name: item_id
+        tests:
+          - unique
+          - not_null
